@@ -1,31 +1,49 @@
 package com.senac.controle_obra;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 
 @Controller
 public class ObraController {
 
-    private static final List<FaseObra> fases = new ArrayList<>();
-    private static final String ARQUIVO_DADOS = "dados_obra.csv";
+    @Autowired
+    private FaseObraRepository repository;
 
-    static {
-        carregarDadosDoArquivo();
+    // Método utilitário para descobrir quem é o usuário logado no momento
+    private String getUsuarioLogado() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof UserDetails) {
+            return ((UserDetails) principal).getUsername();
+        }
+        return principal.toString();
     }
 
     @GetMapping("/")
     public String index(Model model) {
-        int totalAtividades = fases.stream().mapToInt(FaseObra::getAtividadesTotais).sum();
-        int totalExecutadas = fases.stream().mapToInt(FaseObra::getAtividadesExecutadas).sum();
-        int totalRetrabalho = fases.stream().mapToInt(FaseObra::getAtividadesRefazer).sum();
+        String usuario = getUsuarioLogado(); // Descobre quem logou (ex: admin ou tiago)
+        List<FaseObra> fases = repository.findByUsuario(usuario); // Busca APENAS as fases desse usuário
+
+        // Se esse usuário específico nunca entrou antes, cria a planilha padrão para ele
+        if (fases.isEmpty()) {
+            repository.save(new FaseObra("1. Fundação e Infraestrutura", 20, 0, usuario));
+            repository.save(new FaseObra("2. Estrutura e Alvenaria", 35, 0, usuario));
+            repository.save(new FaseObra("3. Cobertura (Telhado)", 15, 0, usuario));
+            repository.save(new FaseObra("4. Instalações (Elétrica/Hidráulica)", 40, 0, usuario));
+            repository.save(new FaseObra("5. Acabamentos e Pintura", 50, 0, usuario));
+            fases = repository.findByUsuario(usuario);
+        }
+
+        int totalAtividades = fases.stream().mapToInt(FaseObra::getActivitiesTotais).sum();
+        int totalExecutadas = fases.stream().mapToInt(FaseObra::getActivitiesExecutadas).sum();
+        int totalRetrabalho = fases.stream().mapToInt(FaseObra::getActivitiesRefazer).sum();
         double progressoGeral = totalAtividades == 0 ? 0 : ((double) totalExecutadas / totalAtividades) * 100;
 
         model.addAttribute("fases", fases);
@@ -33,46 +51,49 @@ public class ObraController {
         model.addAttribute("totalAtividades", totalAtividades);
         model.addAttribute("totalExecutadas", totalExecutadas);
         model.addAttribute("totalRetrabalho", totalRetrabalho);
+        model.addAttribute("username", usuario); // Envia o nome do usuário para a tela
 
         return "index";
     }
 
     @PostMapping("/atualizar")
-    public String atualizarProgressos(@RequestParam("index") int index, @RequestParam("executadas") int executadas) {
-        if (index >= 0 && index < fases.size()) {
-            FaseObra fase = fases.get(index);
-            if (executadas <= fase.getAtividadesTotais() && executadas >= 0) {
-
-                if (executadas < fase.getAtividadesExecutadas()) {
-                    int diferencaPerda = fase.getAtividadesExecutadas() - executadas;
-                    fase.setAtividadesRefazer(fase.getAtividadesRefazer() + diferencaPerda);
+    public String atualizarProgressos(@RequestParam("index") int idDoMenu, @RequestParam("executadas") int executadas) {
+        List<FaseObra> fases = repository.findByUsuario(getUsuarioLogado());
+        if (idDoMenu >= 0 && idDoMenu < fases.size()) {
+            FaseObra fase = fases.get(idDoMenu);
+            if (executadas <= fase.getActivitiesTotais() && executadas >= 0) {
+                if (executadas < fase.getActivitiesExecutadas()) {
+                    int diferencaPerda = fase.getActivitiesExecutadas() - executadas;
+                    fase.setActivitiesRefazer(fase.getActivitiesRefazer() + diferencaPerda);
                 }
-
-                fase.setAtividadesExecutadas(executadas);
-                salvarDadosNoArquivo();
+                fase.setActivitiesExecutadas(executadas);
+                repository.save(fase);
             }
         }
         return "redirect:/";
     }
 
     @PostMapping("/editar-valores")
-    public String editarValoresFase(@RequestParam("index") int index, @RequestParam("totais") int totais) {
-        if (index >= 0 && index < fases.size() && totais > 0) {
-            FaseObra fase = fases.get(index);
-            fase.setAtividadesTotais(totais);
-            if (fase.getAtividadesExecutadas() > totais) {
-                fase.setAtividadesExecutadas(totais);
+    public String editarValoresFase(@RequestParam("index") int idDoMenu, @RequestParam("totais") int totais) {
+        List<FaseObra> fases = repository.findByUsuario(getUsuarioLogado());
+        if (idDoMenu >= 0 && idDoMenu < fases.size() && totais > 0) {
+            FaseObra fase = fases.get(idDoMenu);
+            fase.setActivitiesTotais(totais);
+            if (fase.getActivitiesExecutadas() > totais) {
+                fase.setActivitiesExecutadas(totais);
             }
-            salvarDadosNoArquivo();
+            repository.save(fase);
         }
         return "redirect:/";
     }
 
     @PostMapping("/editar-nome")
-    public String editarNomeFase(@RequestParam("index") int index, @RequestParam("novoNome") String novoNome) {
-        if (index >= 0 && index < fases.size() && novoNome != null && !novoNome.trim().isEmpty()) {
-            fases.get(index).setNome(novoNome.trim());
-            salvarDadosNoArquivo();
+    public String editarNomeFase(@RequestParam("index") int idDoMenu, @RequestParam("novoNome") String novoNome) {
+        List<FaseObra> fases = repository.findByUsuario(getUsuarioLogado());
+        if (idDoMenu >= 0 && idDoMenu < fases.size() && novoNome != null && !novoNome.trim().isEmpty()) {
+            FaseObra fase = fases.get(idDoMenu);
+            fase.setNome(novoNome.trim());
+            repository.save(fase);
         }
         return "redirect:/";
     }
@@ -80,75 +101,28 @@ public class ObraController {
     @PostMapping("/adicionar")
     public String adicionarNovaFase(@RequestParam("nome") String nome, @RequestParam("totais") int totais) {
         if (nome != null && !nome.trim().isEmpty() && totais > 0) {
-            fases.add(new FaseObra(nome.trim(), totais, 0));
-            salvarDadosNoArquivo();
+            repository.save(new FaseObra(nome.trim(), totais, 0, getUsuarioLogado()));
         }
         return "redirect:/";
     }
 
     @PostMapping("/deletar")
-    public String deletarFase(@RequestParam("index") int index) {
-        if (index >= 0 && index < fases.size()) {
-            fases.remove(index);
-            salvarDadosNoArquivo();
+    public String deletarFase(@RequestParam("index") int idDoMenu) {
+        List<FaseObra> fases = repository.findByUsuario(getUsuarioLogado());
+        if (idDoMenu >= 0 && idDoMenu < fases.size()) {
+            repository.delete(fases.get(idDoMenu));
         }
         return "redirect:/";
     }
 
     @PostMapping("/zerar-retrabalho")
-    public String zerarRetrabalhoFase(@RequestParam("index") int index) {
-        if (index >= 0 && index < fases.size()) {
-            fases.get(index).setAtividadesRefazer(0);
-            salvarDadosNoArquivo();
+    public String zerarRetrabalhoFase(@RequestParam("index") int idDoMenu) {
+        List<FaseObra> fases = repository.findByUsuario(getUsuarioLogado());
+        if (idDoMenu >= 0 && idDoMenu < fases.size()) {
+            FaseObra fase = fases.get(idDoMenu);
+            fase.setActivitiesRefazer(0);
+            repository.save(fase);
         }
         return "redirect:/";
-    }
-
-    private static void salvarDadosNoArquivo() {
-        try (BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(
-                new FileOutputStream(ARQUIVO_DADOS), StandardCharsets.UTF_8))) {
-            for (FaseObra fase : fases) {
-                bw.write(fase.getNome() + ";" + fase.getAtividadesTotais() + ";" +
-                        fase.getAtividadesExecutadas() + ";" + fase.getAtividadesRefazer());
-                bw.newLine();
-            }
-        } catch (IOException e) {
-            System.err.println("Erro ao salvar dados: " + e.getMessage());
-        }
-    }
-
-    private static void carregarDadosDoArquivo() {
-        File arquivo = new File(ARQUIVO_DADOS);
-        fases.clear();
-        if (arquivo.exists()) {
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(
-                    new FileInputStream(arquivo), StandardCharsets.UTF_8))) {
-                String linha;
-                while ((linha = br.readLine()) != null) {
-                    String[] partes = linha.split(";");
-                    if (partes.length >= 3) {
-                        FaseObra f = new FaseObra(partes[0], Integer.parseInt(partes[1]), Integer.parseInt(partes[2]));
-                        if (partes.length == 4) {
-                            f.setAtividadesRefazer(Integer.parseInt(partes[3]));
-                        }
-                        fases.add(f);
-                    }
-                }
-            } catch (IOException | NumberFormatException e) {
-                carregarDadosPadrao();
-                salvarDadosNoArquivo();
-            }
-        } else {
-            carregarDadosPadrao();
-            salvarDadosNoArquivo();
-        }
-    }
-
-    private static void carregarDadosPadrao() {
-        fases.add(new FaseObra("1. Fundação e Infraestrutura", 20, 0));
-        fases.add(new FaseObra("2. Estrutura e Alvenaria", 35, 0));
-        fases.add(new FaseObra("3. Cobertura (Telhado)", 15, 0));
-        fases.add(new FaseObra("4. Instalações (Elétrica/Hidráulica)", 40, 0));
-        fases.add(new FaseObra("5. Acabamentos e Pintura", 50, 0));
     }
 }

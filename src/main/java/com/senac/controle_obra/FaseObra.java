@@ -1,35 +1,55 @@
 package com.senac.controle_obra;
 
-public class FaseObra {
-    private String nome;
-    private int atividadesTotais;
-    private int atividadesExecutadas;
-    private int atividadesRefazer; // Nova variável para rastrear o retrabalho
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
 
-    public FaseObra(String nome, int atividadesTotais, int atividadesExecutadas) {
+@Entity
+public class FaseObra {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String nome;
+    private int activitiesTotais;
+    private int activitiesExecutadas;
+    private int activitiesRefazer;
+    private String usuario; // NOVO: Guarda o nome do proprietário desta linha
+
+    public FaseObra() {}
+
+    // Construtor atualizado recebendo o dono da tarefa
+    public FaseObra(String nome, int activitiesTotais, int activitiesExecutadas, String usuario) {
         this.nome = nome;
-        this.atividadesTotais = atividadesTotais;
-        this.atividadesExecutadas = atividadesExecutadas;
-        this.atividadesRefazer = 0; // Começa sem retrabalho
+        this.activitiesTotais = activitiesTotais;
+        this.activitiesExecutadas = activitiesExecutadas;
+        this.activitiesRefazer = 0;
+        this.usuario = usuario;
     }
 
     public int getRestante() {
-        int restante = atividadesTotais - atividadesExecutadas;
+        int restante = activitiesTotais - activitiesExecutadas;
         return restante < 0 ? 0 : restante;
     }
 
     public double getPorcentagem() {
-        if (atividadesTotais == 0) return 0;
-        return ((double) atividadesExecutadas / atividadesTotais) * 100;
+        if (activitiesTotais == 0) return 0;
+        return ((double) activitiesExecutadas / activitiesTotais) * 100;
     }
 
     // Getters e Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
     public String getNome() { return nome; }
     public void setNome(String nome) { this.nome = nome; }
-    public int getAtividadesTotais() { return atividadesTotais; }
-    public void setAtividadesTotais(int atividadesTotais) { this.atividadesTotais = atividadesTotais; }
-    public int getAtividadesExecutadas() { return atividadesExecutadas; }
-    public void setAtividadesExecutadas(int atividadesExecutadas) { this.atividadesExecutadas = atividadesExecutadas; }
-    public int getAtividadesRefazer() { return atividadesRefazer; }
-    public void setAtividadesRefazer(int atividadesRefazer) { this.atividadesRefazer = atividadesRefazer; }
+    public int getActivitiesTotais() { return activitiesTotais; }
+    public void setActivitiesTotais(int activitiesTotais) { this.activitiesTotais = activitiesTotais; }
+    public int getActivitiesExecutadas() { return activitiesExecutadas; }
+    public void setActivitiesExecutadas(int activitiesExecutadas) { this.activitiesExecutadas = activitiesExecutadas; }
+    public int getActivitiesRefazer() { return activitiesRefazer; }
+    public void setActivitiesRefazer(int activitiesRefazer) { this.activitiesRefazer = activitiesRefazer; }
+    public String getUsuario() { return usuario; }
+    public void setUsuario(String usuario) { this.usuario = usuario; }
 }
